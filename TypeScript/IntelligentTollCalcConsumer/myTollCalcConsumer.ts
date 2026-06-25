@@ -1,10 +1,26 @@
 import { IntelligentTollCalc, ModelProvider } from '../IntelligentTollCalcSDK/API/IntelligentTollCalc';
-IntelligentTollCalc.addOpenAI("");
-let toll = IntelligentTollCalc.calculateToll(new Date(), "ABC123", "Volvo XC90", ModelProvider.OpenAI);
-IntelligentTollCalc.addOllama("");
 
-let tollVolvo = await IntelligentTollCalc.calculateToll(new Date(), "DEF456", "Volvo Amazon",  ModelProvider.Anthropic);
+// Register the model providers. An empty key falls back to the provider's
+// standard environment variable (OPENAI_API_KEY / ANTHROPIC_API_KEY); Ollama is
+// local and needs no key.
+IntelligentTollCalc.addOpenAI(process.env.OPENAI_API_KEY ?? "");
+IntelligentTollCalc.addAnthropic(process.env.ANTHROPIC_API_KEY ?? "");
+IntelligentTollCalc.addOllama();
 
-let tollMarsRover = await IntelligentTollCalc.calculateToll(new Date(), "GHI789", "Perserverence Mars Rover",  ModelProvider.Ollama);
+// assessToll never throws on provider issues — clients fail closed, so an
+// unavailable provider just classifies the vehicle as Unknown (chargeable).
+async function demo(vehicleID: string, vehicleModel: string, modelProvider: ModelProvider): Promise<void> {
+    const { toll, vehicleType } = await IntelligentTollCalc.assessToll(new Date(), vehicleID, vehicleModel, modelProvider);
+    console.log(`${modelProvider}: ${vehicleModel} (${vehicleID}) classified as ${vehicleType} -> ${toll} SEK`);
+}
 
-let tollNoAIProvider = await IntelligentTollCalc.calculateToll(new Date(), "JKL012", "Perserverence Mars Rover",  ModelProvider.None);
+// A regular car is charged; a motorcycle and a bus are toll-free vehicle types.
+await demo("ABC123", "Volvo XC90", ModelProvider.OpenAI);
+await demo("DEF456", "Harley-Davidson Street 750", ModelProvider.Anthropic);
+await demo("GHI789", "Volvo 9700 coach bus", ModelProvider.Ollama);
+
+// Without a provider the vehicle type can't be classified, so it is charged.
+await demo("JKL012", "Volvo Amazon", ModelProvider.None);
+
+await demo("JKL012", "Volvo Amazon", ModelProvider.Anthropic
+);

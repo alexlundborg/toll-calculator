@@ -1,4 +1,7 @@
-// interface for the ModelClient class that defines the methods that must be implemented by any model client
+import { VehicleType } from "../Core/tollConfig";
+
+// Interface for a model client that classifies a vehicle model string
+// (e.g. "Volvo XC90") into a general VehicleType used to decide toll exemption.
 export interface IModelClient {
-    isVolvo(carType: string): Promise<boolean>;
+    classifyVehicleType(vehicleModel: string): Promise<VehicleType>;
 }

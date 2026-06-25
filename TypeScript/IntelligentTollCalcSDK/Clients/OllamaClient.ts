@@ -1,41 +1,54 @@
-// non streaming API client for local Ollama model provider without API key
-// This client is used to send car type to Ollama model and get back a boolean value for whether the car is a Volvo or not.
+// Non-streaming model client backed by a local Ollama instance (no API key).
+// Classifies a vehicle model string into a general VehicleType.
 
 import { IModelClient } from "./ModelClient";
+import { AllVehicleTypes, VehicleType } from "../Core/tollConfig";
 
 export class OllamaClient implements IModelClient {
-    async isVolvo(carType: string): Promise<boolean> {
-        return OllamaClient.isVolvoStatic(carType);         
-    }
+    constructor(
+        private readonly baseUrl: string = "http://localhost:11434",
+        private readonly model: string = "gemma3:1b"
+    ) {}
 
-    // send car type to Ollama model and get back a boolean value for whether the car is known to be a Volvo or not
-    public static async isVolvoStatic(carType: string): Promise<boolean> {
-        const normalizedType = carType.toLowerCase().trim();
-        
+    async classifyVehicleType(vehicleModel: string): Promise<VehicleType> {
+        if (!vehicleModel?.trim()) {
+            return VehicleType.Unknown;
+        }
+
         try {
-            const response = await fetch("http://localhost:11434/api/generate", {
+            const response = await fetch(`${this.baseUrl}/api/generate`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    model: "llama2",
-                    prompt: `Is "${normalizedType}" a Volvo car model? Answer with only "yes" or "no".`,
-                    stream: false,
-                }),
+                    model: this.model,
+                    prompt: `Classify the vehicle "${vehicleModel}" into exactly one of these categories: ` +
+                        `${AllVehicleTypes.join(", ")}. Respond with only the category name.`,
+                    stream: false
+                })
             });
 
             if (!response.ok) {
-                console.error("Ollama API error:", response.statusText);
-                return false;
+                console.warn(`Ollama classification unavailable for "${vehicleModel}", treating as Unknown: ${response.statusText}`);
+                return VehicleType.Unknown;
             }
 
-            const data = await response.json();
-            const result = data.response?.toLowerCase().includes("yes") ?? false;
-            return result;
+            const data = await response.json() as { response?: string };
+            return OllamaClient.parseVehicleType(data.response);
         } catch (error) {
-            console.error("Error calling Ollama API:", error);
-            return false;
+            // Fail closed: if the provider is unreachable, treat the vehicle as
+            // Unknown (chargeable) rather than aborting the toll calculation.
+            console.warn(`Ollama classification unavailable for "${vehicleModel}", treating as Unknown: ${(error as Error).message}`);
+            return VehicleType.Unknown;
         }
+    }
+
+    // Free-text local models may answer with a word or short sentence, so match
+    // the first known vehicle type that appears in the response.
+    private static parseVehicleType(text: string | undefined): VehicleType {
+        if (!text) {
+            return VehicleType.Unknown;
+        }
+        const lower = text.toLowerCase();
+        return AllVehicleTypes.find(t => lower.includes(t.toLowerCase())) ?? VehicleType.Unknown;
     }
 }
